@@ -1,3 +1,45 @@
+# 🚗 MiCoche - ParkLab | Tactical Parking Locator
+
+**MiCoche - ParkLab** is a tactical, standalone Progressive Web App (PWA) designed to save your parking spot and locate your vehicle effortlessly—even in low-signal areas and underground parking garages.
+
+🌐 **Live Demo:** [micoche-dondeesta.netlify.app](https://netlify.app)
+
+---
+
+## 🎯 Tactical Features
+
+* **🧭 Haptic Compass Radar:** High-precision visual and tactile guidance that automatically activates when you are within 30 meters of your vehicle.
+* **🗺️ Reverse Geocoding & Offline Maps:** Automatic street identification powered by OpenStreetMap, manual pin fine-tuning, and offline caching for zero-signal environments.
+* **🅿️ Detailed Spot Logging:** Easily record floor/level (`-3` to `Ext`), pillar/spot number, quick notes, and access a history of your last 3 saved spots.
+* **⏱️ Smart Parking Meter:** Built-in timer with traffic-light visual alerts to notify you before your parking time expires.
+* **🔦 Flashlight-Mode Ticket Viewer:** Snap a photo of your parking ticket or pillar and view it against a maximum-brightness white screen, ideal for dark garages.
+* **📱 Screen WakeLock:** Keeps your screen awake while you follow the radar back to your car.
+* **📲 One-Tap Navigation & Sharing:** Share your exact parking coordinates or launch walking directions with a single tap.
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+* **Core:** Vanilla JavaScript (ES6+)
+* **Styling:** Tailwind CSS
+* **Maps & Data:** OpenStreetMap (Reverse Geocoding)
+* **Web APIs:** Geolocation API, DeviceOrientation (Compass), Vibration API (Haptics), Screen Wake Lock API, Service Workers / LocalStorage (Offline support).
+* **Deployment:** Netlify
+
+---
+
+## 👨‍💻 Author
+
+Developed by **Paco Expósito**.
+
+If you find this tool useful, you can support the project by [buying me a coffee on Ko-fi](https://ko-fi.com).
+
+
+========================================================================================================
+========================================================================================================
+========================================================================================================
+
+
 # 🚗 MiCoche - ParkLab | Ubicación Táctica de Estacionamiento
 
 **MiCoche - ParkLab** es una aplicación web progresiva (PWA) táctica y autónoma diseñada para estacionar y recuperar tu vehículo sin fricción, funcionando de manera óptima incluso en condiciones de baja cobertura y parkings subterráneos.
