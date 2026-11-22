@@ -74,4 +74,4 @@ If you find this tool useful, you can support the project by buying me a coffee 
 
 Desarrollado por **Paco Expósito**.
 
-Si te resulta útil esta herramienta, puedes apoyar el proyecto invitándome a un café en Ko-fi: https://ko-fi.com/fexpositog
+Si te resulta útil esta herramienta, puedes apoyar el proyecto invitándome a un café en Ko-fi: https://ko-fi.com/fexpositog 
