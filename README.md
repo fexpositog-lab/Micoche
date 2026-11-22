@@ -1,2 +1,35 @@
-# Micoche
-🚗 PWA táctica y autónoma para guardar tu aparcamiento y recuperar tu coche sin fricción. Incluye radar brújula con respuesta háptica, soporte offline, control de parquímetro y visor de tickets con modo linterna.
+# 🚗 MiCoche - ParkLab | Ubicación Táctica de Estacionamiento
+
+**MiCoche - ParkLab** es una aplicación web progresiva (PWA) táctica y autónoma diseñada para estacionar y recuperar tu vehículo sin fricción, funcionando de manera óptima incluso en condiciones de baja cobertura y parkings subterráneos.
+
+🌐 **Demo en vivo:** [micoche-dondeesta.netlify.app](https://netlify.app)
+
+---
+
+## 🎯 Funcionalidades Tácticas
+
+* **🧭 Radar Brújula con Respuesta Háptica:** Guía visual y táctil de precisión que se activa automáticamente al acercarte a menos de 30 metros de tu vehículo.
+* **🗺️ Geocodificación Inversa y Mapas Offline:** Identificación automática de la calle mediante OpenStreetMap, ajuste fino manual sobre el mapa y caché sin conexión para zonas sin cobertura.
+* **🅿️ Registro Detallado de Plaza:** Guarda fácilmente el nivel o planta (`-3` a `Ext`), número de columna/plaza, notas rápidas e historial de las últimas 3 ubicaciones.
+* **⏱️ Parquímetro Inteligente:** Temporizador con alertas visuales tipo semáforo para avisarte antes de que venza el tiempo de estacionamiento.
+* **🔦 Visor de Ticket con Modo Linterna:** Captura fotos del ticket o del pilar del parking y visualízalas sobre un fondo blanco de máxima iluminación ideal para garajes oscuros.
+* **📱 Bloqueo de Pantalla Activa (WakeLock):** Evita que el teléfono se suspenda mientras sigues el radar de regreso a tu coche.
+* **📲 Compartir Ubicación:** Envía el punto exacto de estacionamiento o inicia la ruta a pie con un solo toque.
+
+---
+
+## 🛠️ Arquitectura y Tecnologías
+
+* **Core:** Vanilla JavaScript (ES6+)
+* **Estilos:** Tailwind CSS
+* **Mapas y Datos:** OpenStreetMap (Geocodificación inversa)
+* **APIs Web:** Geolocation API, DeviceOrientation (Brújula), Vibration API (Háptica), Screen Wake Lock API, Service Workers / LocalStorage (Modo Offline).
+* **Despliegue:** Netlify
+
+---
+
+## 👨‍💻 Autor
+
+Desarrollado por **Paco Expósito**.
+
+Si te resulta útil esta herramienta, puedes apoyar el proyecto [invitándome a un café en Ko-fi](https://ko-fi.com).
