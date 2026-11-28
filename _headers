@@ -1,0 +1,25 @@
+# Reglas de Cabeceras HTTP para Cloudflare Pages / Hosting Estático
+# PWA MiCoche (ParkLab) - Optimización de Seguridad, Sensores y Caché
+
+# 1. Reglas Globales para toda la PWA
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(self), accelerometer=*, gyroscope=*, magnetometer=*, screen-wake-lock=(self)
+
+# 2. Service Worker: NUNCA cachear en CDN/navegador para permitir actualizaciones instantáneas
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Service-Worker-Allowed: /
+  Content-Type: application/javascript; charset=utf-8
+
+# 3. Manifiesto PWA
+/manifest.json
+  Content-Type: application/manifest+json; charset=utf-8
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=86400
+
+# 4. Iconos y Recursos Estáticos Inmutables
+/icons/*
+  Cache-Control: public, max-age=31536000, immutable

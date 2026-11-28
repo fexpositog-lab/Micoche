@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100 select-none theme-light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>MiCoche - ParkLab | Ubicación Táctica de Estacionamiento</title>
+  <meta name="description" content="PWA Mobile-First de cero fricción para guardar la ubicación exacta de estacionamiento y guiarte de vuelta con brújula táctica.">
+  <meta name="theme-color" content="#F1F5F9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#131d31',
+              900: '#0F172A',
+              950: '#090D16',
+            },
+            park: {
+              emerald: '#10B981',
+              emeraldDark: '#047857',
+              amber: '#F59E0B',
+              amberDark: '#D97706',
+              radar: '#3B82F6',
+              danger: '#EF4444'
+            }
+          },
+          fontFamily: {
+            sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Leaflet.js v1.9.4 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* Utilidades tácticas y optimización de renderizado */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    .num-tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    /* Estilos personalizados para Leaflet Dark Theme */
+    .leaflet-container {
+      background-color: #090D16 !important;
+      font-family: inherit;
+    }
+    /* Optimización de contraste sobre el mapa oscuro nativo de Esri */
+    .leaflet-tile-pane {
+      filter: brightness(0.95) contrast(1.15);
+    }
+    .leaflet-bar a {
+      background-color: rgba(15, 23, 42, 0.9) !important;
+      color: #94A3B8 !important;
+      border-color: rgba(255, 255, 255, 0.1) !important;
+      backdrop-filter: blur(8px);
+    }
+    .leaflet-bar a:hover {
+      background-color: #1E293B !important;
+      color: #F8FAFC !important;
+    }
+    .leaflet-bottom.leaflet-left .leaflet-control-zoom {
+      margin-bottom: 16px;
+      margin-left: 16px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25) !important;
+    }
+    /* Animación de pulso táctico */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 0.2; }
+      100% { transform: scale(0.9); opacity: 0.8; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    /* Brújula suave */
+    .compass-transition {
+      transition: transform 0.15s cubic-bezier(0.1, 0.9, 0.2, 1);
+      will-change: transform;
+    }
+    /* Ocultar barra de desplazamiento */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* ================= TEMA DIURNO (LIGHT MODE) ================= */
+    html.theme-light,
+    body.theme-light {
+      background-color: #F1F5F9 !important;
+      color: #0F172A !important;
+    }
+    body.theme-light .leaflet-container {
+      background-color: #E2E8F0 !important;
+    }
+    body.theme-light .leaflet-tile-pane {
+      filter: none !important;
+    }
+    body.theme-light .leaflet-bar a {
+      background-color: rgba(255, 255, 255, 0.95) !important;
+      color: #334155 !important;
+      border-color: rgba(0, 0, 0, 0.1) !important;
+    }
+    body.theme-light #radar-container {
+      background-color: rgba(248, 250, 252, 0.96) !important;
+      color: #0F172A !important;
+    }
+    body.theme-light #radar-container .border-slate-800 {
+      border-color: #CBD5E1 !important;
+      box-shadow: 0 0 40px rgba(59, 130, 246, 0.12) !important;
+    }
+    body.theme-light #radar-container .border-slate-700\/50,
+    body.theme-light #radar-container .border-slate-700\/40 {
+      border-color: #E2E8F0 !important;
+    }
+    body.theme-light #panel-state-1,
+    body.theme-light #panel-state-2 {
+      background-color: rgba(255, 255, 255, 0.96) !important;
+      border-color: rgba(0, 0, 0, 0.08) !important;
+      box-shadow: 0 20px 35px -5px rgba(0, 0, 0, 0.12), 0 10px 15px -5px rgba(0, 0, 0, 0.06) !important;
+    }
+    body.theme-light #gps-status-pill,
+    body.theme-light #telemetry-pill,
+    body.theme-light #view-toggle,
+    body.theme-light #info-btn,
+    body.theme-light #theme-toggle-btn,
+    body.theme-light #recenter-btn {
+      background-color: rgba(255, 255, 255, 0.95) !important;
+      border-color: rgba(0, 0, 0, 0.1) !important;
+      box-shadow: 0 8px 20px -3px rgba(0, 0, 0, 0.1) !important;
+      color: #0F172A !important;
+    }
+    body.theme-light .text-slate-100,
+    body.theme-light .text-slate-200,
+    body.theme-light .text-slate-300 {
+      color: #0F172A !important;
+    }
+    body.theme-light .text-slate-400,
+    body.theme-light .text-slate-500 {
+      color: #475569 !important;
+    }
+    body.theme-light .bg-slate-800,
+    body.theme-light .bg-slate-800\/90 {
+      background-color: #F1F5F9 !important;
+      color: #1E293B !important;
+      border-color: #E2E8F0 !important;
+    }
+    body.theme-light .bg-slate-950,
+    body.theme-light .bg-slate-950\/80 {
+      background-color: #F8FAFC !important;
+      border-color: #E2E8F0 !important;
+    }
+    body.theme-light #modal-meter > div,
+    body.theme-light #modal-history > div,
+    body.theme-light #modal-info > div {
+      background-color: #FFFFFF !important;
+      border-color: #E2E8F0 !important;
+      color: #0F172A !important;
+    }
+    /* Toast animado */
+    .toast-anim {
+      animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes toast-in {
+      from { transform: translateY(-20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="h-full w-full overflow-hidden bg-slate-950 font-sans flex flex-col justify-between theme-light">
+
+  <!-- ==================== HEADER FLOTANTE / PÍLDORAS SUPERIORES ==================== -->
+  <header class="fixed top-0 left-0 right-0 z-[1000] p-3 pt-safe flex items-center justify-between pointer-events-none gap-2">
+    
+    <!-- Lado Izquierdo: Botón Modo Diurno/Nocturno + Píldoras -->
+    <div class="pointer-events-auto flex items-center gap-2">
+      <!-- Botón Modo Diurno / Nocturno (Superior Izquierdo) -->
+      <button id="theme-toggle-btn" type="button" aria-label="Cambiar modo día/noche" class="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/10 text-amber-400 shadow-xl active:scale-95 transition-all shrink-0">
+        <!-- Icono Sol (visible en modo noche para pasar a día) -->
+        <svg id="theme-sun-icon" class="hidden w-6 h-6 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+        <!-- Icono Luna (visible en modo día para pasar a noche) -->
+        <svg id="theme-moon-icon" class="w-6 h-6 text-slate-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      </button>
+
+      <!-- Píldora Estado 1: Calidad GPS -->
+      <div id="gps-status-pill" class="flex items-center gap-2 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-lg text-xs font-semibold text-slate-300 transition-all max-w-[140px] sm:max-w-none">
+        <span id="gps-indicator" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0"></span>
+        <span id="gps-text" class="num-tabular tracking-wide truncate">Iniciando GPS...</span>
+      </div>
+
+      <!-- Píldora Estado 2: Telemetría de Rescate (Oculta por defecto) -->
+      <div id="telemetry-pill" class="hidden flex items-center gap-2 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-lg text-xs font-semibold text-slate-200 transition-all">
+        <div class="flex items-center gap-1.5 text-emerald-400">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <span id="telemetry-time" class="num-tabular text-slate-100">0m</span>
+        </div>
+        <span class="text-white/20">|</span>
+        <div class="flex items-center gap-1.5 text-amber-400">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          <span id="telemetry-dist" class="num-tabular font-bold text-slate-100">0 m</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lado Derecho: Selector de Vista (Mapa | Brújula) + Botón Info (Más grandes) -->
+    <div class="pointer-events-auto flex items-center gap-2">
+      <!-- Selector de Vista (Mapa | Brújula) en Estado 2 -->
+      <div id="view-toggle" class="hidden flex items-center p-1 rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/10 shadow-xl gap-1">
+        <button id="toggle-map-btn" type="button" aria-label="Ver Mapa" class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800 text-emerald-400 flex items-center justify-center transition-all active:scale-95">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+        </button>
+        <button id="toggle-compass-btn" type="button" aria-label="Ver Brújula Radar" class="w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center transition-all active:scale-95">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+        </button>
+      </div>
+
+      <!-- Botón Info & Desarrollador (Área táctil ampliada: w-11 h-11 / w-12 h-12 con icono w-6 h-6) -->
+      <button id="info-btn" type="button" aria-label="Información y desarrollador" class="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl bg-slate-900/90 backdrop-blur-md border border-white/10 text-slate-300 hover:text-white shadow-xl active:scale-95 transition-all">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Toast Flotante de Avisos Tácticos (ej. Activación automática de brújula a <30m) -->
+  <div id="tactical-toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-[1100] px-4 py-2.5 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-amber-500/40 shadow-2xl text-xs font-bold text-amber-300 flex items-center gap-2 pointer-events-none toast-anim max-w-[90vw] text-center">
+    <span id="toast-message">🎯 ¡A menos de 30 m! Brújula táctica activada</span>
+  </div>
+
+  <!-- ==================== CONTENEDOR CENTRAL: MAPA & BRÚJULA ==================== -->
+  <main class="relative flex-1 w-full h-full overflow-hidden">
+    
+    <!-- VISTA 1: MAPA LEAFLET -->
+    <div id="map" class="absolute inset-0 w-full h-full z-0"></div>
+
+    <!-- Botón Flotante para re-centrar el mapa -->
+    <button id="recenter-btn" type="button" aria-label="Centrar en mi posición" class="absolute right-4 bottom-72 z-[500] p-3 rounded-full bg-slate-900/90 text-slate-300 hover:text-white border border-white/10 backdrop-blur-md shadow-xl active:scale-90 transition-all">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+    </button>
+
+    <!-- VISTA 2: RADAR BRÚJULA TÁCTICA (Totalmente adaptativa, NUNCA cortada) -->
+    <div id="radar-container" class="hidden absolute inset-0 w-full h-full z-10 bg-slate-950/95 backdrop-blur-xl flex flex-col items-center justify-start pt-16 sm:pt-28 pb-80 sm:pb-96 overflow-y-auto no-scrollbar text-center select-none">
+      
+      <!-- Dial exterior circular (compacto y equilibrado en móvil, grande en sm+) -->
+      <div class="relative w-48 h-48 sm:w-64 sm:h-64 rounded-full border-2 border-slate-800 flex items-center justify-center shadow-[0_0_50px_rgba(59,130,246,0.15)] shrink-0 my-auto">
+        
+        <!-- Puntos cardinales -->
+        <span class="absolute top-2 sm:top-2.5 text-[11px] sm:text-xs font-black tracking-widest text-emerald-400">N</span>
+        <span class="absolute right-2.5 sm:right-3.5 text-[11px] sm:text-xs font-bold text-slate-500">E</span>
+        <span class="absolute bottom-2 sm:bottom-2.5 text-[11px] sm:text-xs font-bold text-slate-500">S</span>
+        <span class="absolute left-2.5 sm:left-3.5 text-[11px] sm:text-xs font-bold text-slate-500">O</span>
+        
+        <!-- Círculo interior con rejilla -->
+        <div class="w-36 h-36 sm:w-48 sm:h-48 rounded-full border border-slate-700/50 flex items-center justify-center relative">
+          <div class="w-24 h-24 sm:w-32 sm:h-32 rounded-full border border-dashed border-slate-700/40"></div>
+          
+          <!-- Flecha de rumbo hacia el coche -->
+          <div id="compass-arrow" class="absolute w-full h-full flex items-center justify-center compass-transition" style="transform: rotate(0deg);">
+            <svg class="w-16 h-16 sm:w-24 sm:h-24 text-amber-400 drop-shadow-[0_0_15px_rgba(245,158,11,0.6)]" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L4 20L12 16.5L20 20L12 2Z"/>
+            </svg>
+          </div>
+
+          <!-- Centro focal -->
+          <div class="absolute w-3.5 h-3.5 rounded-full bg-slate-950 border-2 border-amber-400 z-20"></div>
+        </div>
+      </div>
+
+      <!-- Telemetría de la brújula -->
+      <div class="mt-2 sm:mt-6 flex flex-col items-center shrink-0">
+        <div class="flex items-baseline gap-1 sm:gap-1.5 text-slate-100">
+          <span id="compass-distance-big" class="text-3xl sm:text-5xl font-black tracking-tight num-tabular text-amber-400">0</span>
+          <span class="text-base sm:text-xl font-bold text-slate-400">metros</span>
+        </div>
+        <p id="compass-direction-text" class="mt-1.5 sm:mt-2 text-[11px] sm:text-sm font-semibold tracking-wide text-slate-300 uppercase px-3 py-1 sm:px-4 sm:py-1.5 rounded-full bg-slate-900 border border-white/10 shadow-md">
+          Alineando rumbo...
+        </p>
+        <p id="compass-hint" class="mt-1 sm:mt-2 text-[10px] sm:text-[11px] text-slate-500 max-w-xs px-2">
+          Sostén el dispositivo horizontalmente para una precisión óptima.
+        </p>
+
+        <!-- Botón de permiso para iOS Safari -->
+        <button id="ios-sensor-btn" type="button" class="hidden mt-2 sm:mt-3 px-4 py-2.5 rounded-xl bg-blue-600 text-xs font-bold text-white shadow-lg active:scale-95 transition-all">
+          Activar Sensor de Brújula
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== BOTTOM SHEET: PANELES INTERACTIVOS ==================== -->
+  <footer class="relative z-[900] w-full max-w-md mx-auto px-3 pb-3 sm:px-4 sm:pb-4">
+    
+    <!-- ==================== ESTADO 1: PANEL "BUSCANDO APARCAMIENTO" ==================== -->
+    <div id="panel-state-1" class="rounded-3xl bg-slate-900/95 backdrop-blur-xl border border-white/10 p-5 shadow-2xl flex flex-col gap-4">
+      <div class="flex items-center justify-between">
+        <div class="flex flex-col">
+          <span class="text-xs font-semibold tracking-wider uppercase text-emerald-400">Radar Activo</span>
+          <p id="parking-hint-text" class="text-sm font-medium text-slate-300">Arrastra o pulsa el mapa para afinar el punto.</p>
+        </div>
+        <button id="btn-history" type="button" aria-label="Ver historial de plazas" class="px-3 py-1.5 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300 hover:text-white border border-white/5 active:scale-95 transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          Historial
+        </button>
+      </div>
+
+      <!-- Botón Maestro "HE APARCADO AQUÍ" (64px altura, alto contraste) -->
+      <button id="btn-park-here" type="button" class="w-full h-16 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:scale-[0.98] text-slate-950 font-black text-lg tracking-wide shadow-[0_8px_30px_rgb(16,185,129,0.35)] flex items-center justify-center gap-3 transition-all">
+        <svg class="w-7 h-7 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+        <span>HE APARCADO AQUÍ</span>
+      </button>
+    </div>
+
+    <!-- ==================== ESTADO 2: PANEL "MODO RESCATE Y CONTROL" ==================== -->
+    <div id="panel-state-2" class="hidden rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/10 p-3.5 sm:p-5 shadow-2xl flex flex-col gap-2.5 sm:gap-3.5">
+      
+      <!-- Barra Semántica del Parquímetro -->
+      <div id="meter-container" class="w-full bg-slate-950/80 rounded-xl p-2 border border-white/5 flex flex-col gap-1">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1.5 font-semibold" id="meter-status-label">
+            <span id="meter-indicator-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span id="meter-time-left" class="text-slate-300">Sin parquímetro</span>
+          </div>
+          <button id="btn-open-meter" type="button" class="text-[11px] font-bold text-amber-400 hover:text-amber-300 uppercase tracking-wider">
+            + Añadir Tiempo
+          </button>
+        </div>
+        <div class="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+          <div id="meter-progress-bar" class="h-full bg-emerald-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Dirección Geocodificada y Nivel Subterráneo -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex flex-col min-w-0">
+          <p id="car-address-text" class="text-xs sm:text-sm font-semibold text-slate-100 truncate">Resolviendo calle...</p>
+          <p id="car-subterranean-summary" class="text-[10px] sm:text-xs text-amber-400 font-medium">Planta: 0 | Plaza: -</p>
+        </div>
+        <!-- Botón Desplegable Detalles Subterráneos & Foto -->
+        <button id="btn-toggle-subterranean" type="button" class="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white border border-white/10 text-xs font-semibold flex items-center gap-1">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          Detalles
+        </button>
+      </div>
+
+      <!-- Acordeón Desplegable: Planta, Plaza, Nota y Foto de Ticket/Pilar -->
+      <div id="subterranean-drawer" class="hidden flex flex-col gap-3 pt-2 border-t border-white/5">
+        <!-- Selector de Planta -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[11px] font-semibold text-slate-400">Planta / Nivel</label>
+          <div class="grid grid-cols-5 gap-1.5" id="floor-selector">
+            <button type="button" data-floor="-3" class="floor-btn py-1.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700">-3</button>
+            <button type="button" data-floor="-2" class="floor-btn py-1.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700">-2</button>
+            <button type="button" data-floor="-1" class="floor-btn py-1.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700">-1</button>
+            <button type="button" data-floor="0" class="floor-btn py-1.5 rounded-lg bg-emerald-600 text-xs font-bold text-slate-950">0</button>
+            <button type="button" data-floor="Ext" class="floor-btn py-1.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700">Ext</button>
+          </div>
+        </div>
+
+        <!-- Plaza y Nota -->
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label for="input-spot" class="text-[11px] font-semibold text-slate-400">Columna / Plaza</label>
+            <input id="input-spot" type="text" placeholder="Ej: B-14, Pilar Azul" maxlength="20" class="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500">
+          </div>
+          <div>
+            <label for="input-note" class="text-[11px] font-semibold text-slate-400">Nota rápida</label>
+            <input id="input-note" type="text" placeholder="Ej: Cerca de salida 2" maxlength="35" class="w-full mt-1 px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500">
+          </div>
+        </div>
+
+        <!-- Foto del Pilar / Ticket con compresión y visor linterna -->
+        <div class="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-white/5">
+          <div class="flex items-center gap-2.5">
+            <!-- Miniatura de foto o placeholder -->
+            <div id="photo-preview-box" class="w-12 h-12 rounded-lg bg-slate-900 border border-white/10 overflow-hidden flex items-center justify-center cursor-pointer">
+              <svg id="photo-placeholder-icon" class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+              <img id="photo-thumb-img" alt="Ticket o pilar" class="hidden w-full h-full object-cover">
+            </div>
+            <div class="flex flex-col">
+              <span class="text-xs font-semibold text-slate-200">Foto Ticket / Columna</span>
+              <span id="photo-status-text" class="text-[10px] text-slate-500">Toca miniatura para modo linterna</span>
+            </div>
+          </div>
+
+          <label class="px-3 py-2 rounded-xl bg-slate-800 text-xs font-bold text-slate-200 hover:text-white cursor-pointer active:scale-95 transition-all">
+            <span>Capturar</span>
+            <input id="camera-input" type="file" accept="image/*" capture="environment" class="hidden">
+          </label>
+        </div>
+      </div>
+
+      <!-- Fila Principal: Navegación Dual (Ir Caminando / En Coche) -->
+      <div class="flex items-center gap-2">
+        <!-- Botón Principal: Caminando (Ámbar de alto impacto) -->
+        <button id="btn-walk" type="button" class="flex-1 h-12 sm:h-14 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-[0.98] text-slate-950 font-black text-sm tracking-wide shadow-[0_6px_20px_rgb(245,158,11,0.3)] flex items-center justify-center gap-2 transition-all">
+          <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6m3-3l3 3-3 3"></path></svg>
+          <span>IR CAMINANDO</span>
+        </button>
+
+        <!-- Botón Secundario: En Coche -->
+        <button id="btn-drive" type="button" aria-label="Ir en coche" class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 active:scale-95 flex items-center justify-center border border-white/10 transition-all">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17l4 4 4-4m-4-5v9M4 4h16v8a4 4 0 01-4 4H8a4 4 0 01-4-4V4z"></path></svg>
+        </button>
+      </div>
+
+      <!-- Fila Secundaria: Utilidades y Cierre Seguro -->
+      <div class="flex items-center gap-2">
+        <!-- Compartir Ubicación (Web Share API) -->
+        <button id="btn-share" type="button" class="flex-1 h-10 sm:h-12 rounded-xl bg-slate-800/90 text-slate-200 hover:bg-slate-700 text-xs font-semibold flex items-center justify-center gap-2 border border-white/5 active:scale-95 transition-all">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+          <span>Compartir</span>
+        </button>
+
+        <!-- Botón Liberar Plaza (Doble Confirmación de 4s) -->
+        <button id="btn-release" type="button" class="flex-1 h-10 sm:h-12 rounded-xl bg-red-950/40 hover:bg-red-900/50 border border-red-500/30 text-red-400 text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          <span id="release-btn-label">Ya estoy en mi coche</span>
+        </button>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ==================== MODALES ==================== -->
+
+  <!-- Modal 1: Parquímetro Rápido -->
+  <div id="modal-meter" class="hidden fixed inset-0 z-[2000] bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
+    <div class="w-full max-w-sm rounded-3xl bg-slate-900 border border-white/10 p-6 flex flex-col gap-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-100">Ajustar Parquímetro</h3>
+        <button id="close-meter-modal" type="button" class="text-slate-400 hover:text-white p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <p class="text-xs text-slate-400">Selecciona el tiempo de estacionamiento para recibir avisos semánticos antes de que venza.</p>
+      
+      <div class="grid grid-cols-3 gap-2">
+        <button type="button" data-add-min="30" class="meter-pill-btn py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/5">+30 min</button>
+        <button type="button" data-add-min="60" class="meter-pill-btn py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/5">+1 hora</button>
+        <button type="button" data-add-min="120" class="meter-pill-btn py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-white/5">+2 horas</button>
+      </div>
+
+      <div class="flex items-center gap-2 mt-1">
+        <input id="custom-meter-time" type="time" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-950 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-amber-400">
+        <button id="btn-set-custom-meter" type="button" class="px-4 py-2.5 rounded-xl bg-amber-500 text-slate-950 text-xs font-bold hover:bg-amber-400">Fijar</button>
+      </div>
+
+      <button id="btn-clear-meter" type="button" class="w-full py-2.5 rounded-xl bg-slate-800 text-red-400 hover:bg-slate-700 text-xs font-semibold">
+        Quitar Parquímetro
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal 2: Visor Linterna a Pantalla Completa (#FFFFFF) -->
+  <div id="modal-flashlight" class="hidden fixed inset-0 z-[2500] bg-white text-slate-950 flex flex-col justify-between p-6 select-none">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-black uppercase tracking-wider text-slate-800">Modo Linterna / Ticket</span>
+      <button id="close-flashlight-btn" type="button" class="p-3 rounded-full bg-slate-950 text-white font-bold text-xs shadow-xl active:scale-95">
+        CERRAR ✕
+      </button>
+    </div>
+
+    <div class="flex-1 flex items-center justify-center my-4 overflow-hidden">
+      <img id="flashlight-full-img" alt="Foto Ticket o Pilar a máxima luz" class="max-h-full max-w-full object-contain rounded-xl shadow-2xl">
+    </div>
+
+    <div class="text-center">
+      <p class="text-xs font-bold text-slate-700">Fondo blanco de máxima iluminación para parkings oscuros.</p>
+    </div>
+  </div>
+
+  <!-- Modal 3: Historial de las 3 Últimas Plazas -->
+  <div id="modal-history" class="hidden fixed inset-0 z-[2000] bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-3xl bg-slate-900 border border-white/10 p-6 flex flex-col gap-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+          <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          Últimas 3 Plazas Guardadas
+        </h3>
+        <button id="close-history-modal" type="button" class="text-slate-400 hover:text-white p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div id="history-items-container" class="flex flex-col gap-2 max-h-72 overflow-y-auto no-scrollbar">
+        <!-- Renderizado dinámico de plazas históricas -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Información de la Aplicación y Desarrollador -->
+  <div id="modal-info" class="hidden fixed inset-0 z-[2000] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="w-full max-w-sm rounded-3xl bg-slate-900 border border-white/10 p-6 flex flex-col gap-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-100">MiCoche - ParkLab</h3>
+        <button id="close-info-modal" type="button" class="text-slate-400 hover:text-white p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        PWA táctica y autónoma diseñada para estacionar y recuperar tu vehículo sin fricción, incluso en condiciones de baja cobertura y parkings subterráneos.
+      </p>
+
+      <div class="p-3.5 rounded-2xl bg-slate-950 border border-white/5 flex flex-col gap-2">
+        <span class="text-xs font-semibold text-emerald-400">Funcionalidades Tácticas:</span>
+        <ul class="text-[11px] text-slate-400 space-y-1 list-disc list-inside">
+          <li>Radar Brújula con respuesta háptica.</li>
+          <li>Geocodificación inversa OpenStreetMap.</li>
+          <li>Caché sin conexión para mapas.</li>
+          <li>Parquímetro inteligente con semáforo.</li>
+          <li>Visor de ticket con modo linterna.</li>
+          <li>Bloqueo de pantalla activa (WakeLock).</li>
+        </ul>
+      </div>
+
+      <div class="pt-2 border-t border-white/5 flex flex-col gap-2.5">
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <span>Desarrollador:</span>
+          <span class="font-bold text-emerald-400 text-sm">Paco Expósito</span>
+        </div>
+
+        <!-- Botón Ko-fi Desarrollador -->
+        <a href="https://ko-fi.com/fexpositog" target="_blank" rel="noopener noreferrer" class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#FF5E5B] to-[#FF424D] hover:from-[#e04e4b] hover:to-[#e03741] text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-xl shadow-red-500/25 active:scale-95 transition-all">
+          <svg class="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24">
+            <path d="M23.881 8.948c-.024-.61-.353-1.157-.862-1.46-1.042-.622-2.585-.826-4.526-.607-.038-.073-.082-.143-.131-.212C16.89 4.542 14.154 3 11 3 6.029 3 2 7.029 2 12c0 4.148 2.805 7.643 6.643 8.685.876.237 1.838.315 2.857.315 4.673 0 8.5-3.827 8.5-8.5 0-.44-.032-.873-.095-1.296 1.704-.156 3.018-.614 3.737-1.391.22-.239.319-.526.239-.865zm-5.467 1.777c-.12.44-.277.863-.467 1.267-.282.6-.641 1.151-1.066 1.636C15.702 14.996 13.518 16 11 16c-2.209 0-4-1.791-4-4s1.791-4 4-4c1.236 0 2.348.562 3.084 1.442.274.327.497.7.662 1.107.086.211.156.43.208.654.896-.067 1.954-.038 2.51.127.18.053.27.168.27.322 0 .093-.035.197-.103.273-.132.148-.528.324-1.75.297z"/>
+          </svg>
+          <span>Invitar a un café en Ko-fi a Paco Expósito</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== LÓGICA JAVASCRIPT MODULAR ES6+ ==================== -->
+  <script>
+    // --- === SERVICIOS NATIVOS & GESTORES DE DATOS === ---
+
+    // 1. StorageManager: Persistencia Local e IndexedDB para fotos
+    const StorageManager = {
+      DB_NAME: 'MiCocheDB',
+      DB_VERSION: 1,
+      STORE_PHOTOS: 'photos',
+      db: null,
+
+      async initDB() {
+        if (!('indexedDB' in window)) return null;
+        return new Promise((resolve) => {
+          const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(this.STORE_PHOTOS)) {
+              db.createObjectStore(this.STORE_PHOTOS, { keyPath: 'id' });
+            }
+          };
+          req.onsuccess = (e) => {
+            this.db = e.target.result;
+            resolve(this.db);
+          };
+          req.onerror = () => resolve(null);
+        });
+      },
+
+      async savePhoto(id, dataUrl) {
+        if (!this.db) await this.initDB();
+        if (!this.db) return false;
+        return new Promise((resolve) => {
+          try {
+            const tx = this.db.transaction(this.STORE_PHOTOS, 'readwrite');
+            const store = tx.objectStore(this.STORE_PHOTOS);
+            store.put({ id, dataUrl, createdAt: Date.now() });
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+          } catch (err) {
+            resolve(false);
+          }
+        });
+      },
+
+      async getPhoto(id) {
+        if (!this.db) await this.initDB();
+        if (!this.db) return null;
+        return new Promise((resolve) => {
+          try {
+            const tx = this.db.transaction(this.STORE_PHOTOS, 'readonly');
+            const store = tx.objectStore(this.STORE_PHOTOS);
+            const req = store.get(id);
+            req.onsuccess = () => resolve(req.result ? req.result.dataUrl : null);
+            req.onerror = () => resolve(null);
+          } catch (err) {
+            resolve(null);
+          }
+        });
+      },
+
+      async deletePhoto(id) {
+        if (!this.db) await this.initDB();
+        if (!this.db) return;
+        try {
+          const tx = this.db.transaction(this.STORE_PHOTOS, 'readwrite');
+          tx.objectStore(this.STORE_PHOTOS).delete(id);
+        } catch (e) {}
+      },
+
+      // Métodos localStorage
+      getActiveSpot() {
+        try {
+          const data = localStorage.getItem('micoche_active_spot');
+          return data ? JSON.parse(data) : null;
+        } catch (e) {
+          return null;
+        }
+      },
+
+      setActiveSpot(spotData) {
+        try {
+          localStorage.setItem('micoche_active_spot', JSON.stringify(spotData));
+        } catch (e) {}
+      },
+
+      clearActiveSpot() {
+        try {
+          localStorage.removeItem('micoche_active_spot');
+        } catch (e) {}
+      },
+
+      getHistory() {
+        try {
+          const data = localStorage.getItem('micoche_spot_history');
+          return data ? JSON.parse(data) : [];
+        } catch (e) {
+          return [];
+        }
+      },
+
+      archiveSpot(spotData) {
+        try {
+          const history = this.getHistory();
+          history.unshift({ ...spotData, archivedAt: Date.now() });
+          const trimmed = history.slice(0, 3); // Guardar estrictamente las últimas 3 plazas
+          localStorage.setItem('micoche_spot_history', JSON.stringify(trimmed));
+        } catch (e) {}
+      }
+    };
+
+    // 2. ImageService: Compresión de imágenes vía Canvas
+    const ImageService = {
+      compressImage(file, maxWidth = 800, quality = 0.7) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let width = img.width;
+              let height = img.height;
+
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = (err) => reject(err);
+          };
+          reader.onerror = (err) => reject(err);
+        });
+      }
+    };
+
+    // 3. WakeLockService: Bloqueo de pantalla activa
+    const WakeLockService = {
+      wakeLock: null,
+
+      async request() {
+        if ('wakeLock' in navigator) {
+          try {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+            this.wakeLock.addEventListener('release', () => {
+              this.wakeLock = null;
+            });
+          } catch (err) {
+            console.warn('[WakeLock] No concedido:', err.message);
+          }
+        }
+      },
+
+      release() {
+        if (this.wakeLock) {
+          this.wakeLock.release().catch(() => {});
+          this.wakeLock = null;
+        }
+      },
+
+      initAutoReacquire() {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible' && AppState.currentMode === 2) {
+            this.request();
+          }
+        });
+      }
+    };
+
+    // 4. GeoService: Geodesia, GPS y Geocodificación Inversa
+    const GeoService = {
+      watchId: null,
+      currentPos: null,
+      lastHapticTime: 0,
+
+      // Haversine para calcular distancia exacta en metros
+      calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371e3; // Radio de la Tierra en metros
+        const phi1 = (lat1 * Math.PI) / 180;
+        const phi2 = (lat2 * Math.PI) / 180;
+        const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
+        const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+
+        const a =
+          Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+          Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return Math.round(R * c);
+      },
+
+      // Cálculo de rumbo (bearing) hacia el destino en grados (0° a 360°)
+      calculateBearing(lat1, lon1, lat2, lon2) {
+        const phi1 = (lat1 * Math.PI) / 180;
+        const phi2 = (lat2 * Math.PI) / 180;
+        const lambda1 = (lon1 * Math.PI) / 180;
+        const lambda2 = (lon2 * Math.PI) / 180;
+
+        const y = Math.sin(lambda2 - lambda1) * Math.cos(phi2);
+        const x =
+          Math.cos(phi1) * Math.sin(phi2) -
+          Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambda2 - lambda1);
+        const theta = Math.atan2(y, x);
+        return (theta * 180 / Math.PI + 360) % 360;
+      },
+
+      // Geocodificación inversa con Nominatim OpenStreetMap
+      async reverseGeocode(lat, lng) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+          if (!response.ok) return 'Ubicación interior / Sin red';
+          const data = await response.json();
+          if (data && data.address) {
+            const road = data.address.road || data.address.pedestrian || data.address.suburb || '';
+            const house = data.address.house_number ? `, ${data.address.house_number}` : '';
+            return road ? `Cerca de ${road}${house}` : (data.display_name?.split(',')[0] || 'Ubicación guardada');
+          }
+          return 'Ubicación guardada';
+        } catch (e) {
+          return 'Ubicación interior / Sin red';
+        }
+      },
+
+      startWatching(onSuccess, onError) {
+        if (!('geolocation' in navigator)) {
+          if (onError) onError(new Error('Geolocalización no soportada'));
+          return;
+        }
+
+        const options = {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 1000
+        };
+
+        this.watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            this.currentPos = pos;
+            if (onSuccess) onSuccess(pos);
+          },
+          (err) => {
+            if (onError) onError(err);
+          },
+          options
+        );
+      },
+
+      stopWatching() {
+        if (this.watchId !== null) {
+          navigator.geolocation.clearWatch(this.watchId);
+          this.watchId = null;
+        }
+      }
+    };
+
+    // 5. CompassService: Brújula Táctica y Feedback Háptico
+    const CompassService = {
+      heading: null,
+      listenerActive: false,
+      onHeadingChange: null,
+
+      init(callback) {
+        this.onHeadingChange = callback;
+
+        // Soporte para iOS Safari (requiere permiso explícito)
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          const iosBtn = document.getElementById('ios-sensor-btn');
+          if (iosBtn) {
+            iosBtn.classList.remove('hidden');
+            iosBtn.onclick = async () => {
+              try {
+                const response = await DeviceOrientationEvent.requestPermission();
+                if (response === 'granted') {
+                  iosBtn.classList.add('hidden');
+                  this.attachListener();
+                } else {
+                  alert('Permiso de orientación denegado.');
+                }
+              } catch (e) {
+                console.warn(e);
+              }
+            };
+          }
+        } else {
+          this.attachListener();
+        }
+      },
+
+      attachListener() {
+        if (this.listenerActive) return;
+
+        const handleOrientation = (e) => {
+          let compassHeading = null;
+          if (e.webkitCompassHeading) {
+            // iOS da la orientación absoluta directa
+            compassHeading = e.webkitCompassHeading;
+          } else if (e.alpha !== null) {
+            // Android: e.alpha suele ser relativo a la posición inicial si no es absoluto
+            compassHeading = 360 - e.alpha;
+          }
+
+          if (compassHeading !== null) {
+            this.heading = (compassHeading + 360) % 360;
+            if (this.onHeadingChange) this.onHeadingChange(this.heading);
+          }
+        };
+
+        // Preferir deviceorientationabsolute si está disponible en Android
+        if ('ondeviceorientationabsolute' in window) {
+          window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+        } else if ('ondeviceorientation' in window) {
+          window.addEventListener('deviceorientation', handleOrientation, true);
+        }
+        this.listenerActive = true;
+      }
+    };
+
+    // --- === ESTADO GLOBAL DE LA APLICACIÓN === ---
+    const AppState = {
+      currentMode: 1, // 1: Buscando sitio, 2: Coche aparcado
+      theme: 'light', // 'light' | 'dark'
+      userLat: null,
+      userLng: null,
+      userAccuracy: null,
+      pinnedLat: null, // Punto elegido para aparcar (por defecto userLat)
+      pinnedLng: null,
+      activeSpot: null,
+      activePhotoUrl: null,
+      activeView: 'map', // 'map' | 'compass'
+      nearCarTriggered: false,
+      notifiedNearCar: false,
+      walkingModeActive: false,
+      toastTimer: null,
+      releaseTimer: null,
+      meterInterval: null,
+      telemetryInterval: null
+    };
+
+    // --- === CONTROLADOR UI Y MAPA LEAFLET === ---
+    const UIManager = {
+      map: null,
+      activeTileLayer: null,
+      userMarker: null,
+      userAccuracyCircle: null,
+      carMarker: null,
+
+      initTheme() {
+        const savedTheme = localStorage.getItem('micoche_theme') || 'light';
+        this.setTheme(savedTheme);
+      },
+
+      setTheme(theme) {
+        AppState.theme = theme;
+        try {
+          localStorage.setItem('micoche_theme', theme);
+        } catch (e) {}
+
+        const sunIcon = document.getElementById('theme-sun-icon');
+        const moonIcon = document.getElementById('theme-moon-icon');
+        const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+
+        if (theme === 'light') {
+          document.documentElement.classList.add('theme-light');
+          document.body.classList.add('theme-light');
+          if (metaThemeColor) metaThemeColor.setAttribute('content', '#F1F5F9');
+          if (sunIcon) sunIcon.classList.add('hidden');
+          if (moonIcon) moonIcon.classList.remove('hidden');
+
+          // Cambiar teselas a modo diurno claro
+          if (this.map && this.activeTileLayer) {
+            this.map.removeLayer(this.activeTileLayer);
+            this.activeTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+              maxZoom: 19,
+              attribution: 'Tiles &copy; Esri &mdash; DeLorme, NAVTEQ'
+            }).addTo(this.map);
+          }
+        } else {
+          document.documentElement.classList.remove('theme-light');
+          document.body.classList.remove('theme-light');
+          if (metaThemeColor) metaThemeColor.setAttribute('content', '#0F172A');
+          if (sunIcon) sunIcon.classList.remove('hidden');
+          if (moonIcon) moonIcon.classList.add('hidden');
+
+          // Cambiar teselas a modo oscuro
+          if (this.map && this.activeTileLayer) {
+            this.map.removeLayer(this.activeTileLayer);
+            this.activeTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+              maxZoom: 19,
+              maxNativeZoom: 16,
+              attribution: 'Tiles &copy; Esri &mdash; DeLorme, NAVTEQ'
+            }).addTo(this.map);
+          }
+        }
+      },
+
+      showToast(msg) {
+        const toast = document.getElementById('tactical-toast');
+        const toastMsg = document.getElementById('toast-message');
+        if (!toast || !toastMsg) return;
+        toastMsg.textContent = msg;
+        toast.classList.remove('hidden');
+        if (AppState.toastTimer) clearTimeout(AppState.toastTimer);
+        AppState.toastTimer = setTimeout(() => {
+          toast.classList.add('hidden');
+          AppState.toastTimer = null;
+        }, 3500);
+      },
+
+      initMap() {
+        // Inicializar mapa centrado en coordenadas por defecto (o guardadas)
+        this.map = L.map('map', {
+          zoomControl: false,
+          attributionControl: false
+        }).setView([40.4168, -3.7038], 16);
+
+        // Capa de teselas inicial según tema
+        const initialTileUrl = AppState.theme === 'light'
+          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+          : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+
+        this.activeTileLayer = L.tileLayer(initialTileUrl, {
+          maxZoom: 19,
+          maxNativeZoom: 16,
+          attribution: 'Tiles &copy; Esri &mdash; DeLorme, NAVTEQ'
+        }).addTo(this.map);
+
+        // Fallback automático de alta resiliencia
+        let fallbackTriggered = false;
+        this.activeTileLayer.on('tileerror', () => {
+          if (!fallbackTriggered) {
+            fallbackTriggered = true;
+            console.warn('[Mapa] Conmutando a capa de respaldo libre de alta disponibilidad...');
+            this.map.removeLayer(this.activeTileLayer);
+            this.activeTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', {
+              maxZoom: 19,
+              attribution: '&copy; OpenStreetMap France'
+            }).addTo(this.map);
+          }
+        });
+
+        // Control de zoom en la esquina inferior izquierda (encima de la tarjeta inferior)
+        L.control.zoom({ position: 'bottomleft' }).addTo(this.map);
+
+        // Evento de toque en el mapa para afinar el punto en Estado 1
+        this.map.on('click', (e) => {
+          if (AppState.currentMode === 1) {
+            AppState.pinnedLat = e.latlng.lat;
+            AppState.pinnedLng = e.latlng.lng;
+            this.updateCarPinMarker(AppState.pinnedLat, AppState.pinnedLng, true);
+          }
+        });
+      },
+
+      updateUserPosition(lat, lng, accuracy) {
+        AppState.userLat = lat;
+        AppState.userLng = lng;
+        AppState.userAccuracy = accuracy;
+
+        // Crear o actualizar icono de posición del usuario
+        if (!this.userMarker) {
+          const userIcon = L.divIcon({
+            className: 'custom-user-icon',
+            html: `
+              <div class="relative flex items-center justify-center w-8 h-8">
+                <div class="absolute w-8 h-8 rounded-full bg-blue-500/30 animate-pulse-ring"></div>
+                <div class="w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow-md"></div>
+              </div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          });
+
+          this.userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(this.map);
+          this.userAccuracyCircle = L.circle([lat, lng], {
+            radius: accuracy,
+            color: '#3B82F6',
+            weight: 1,
+            fillColor: '#3B82F6',
+            fillOpacity: 0.1
+          }).addTo(this.map);
+
+          // Si estamos en Estado 1 y aún no hemos fijado pin manual, centrar aquí
+          if (AppState.currentMode === 1 && !AppState.pinnedLat) {
+            AppState.pinnedLat = lat;
+            AppState.pinnedLng = lng;
+            this.updateCarPinMarker(lat, lng, false);
+            this.map.setView([lat, lng], 17);
+          }
+        } else {
+          this.userMarker.setLatLng([lat, lng]);
+          this.userAccuracyCircle.setLatLng([lat, lng]);
+          this.userAccuracyCircle.setRadius(accuracy);
+        }
+
+        this.updateGPSPill(accuracy);
+
+        // Si estamos en Estado 2, actualizar telemetría en vivo
+        if (AppState.currentMode === 2 && AppState.activeSpot) {
+          this.refreshTelemetry();
+        }
+      },
+
+      updateCarPinMarker(lat, lng, isDraggable = false) {
+        if (!this.carMarker) {
+          const carIcon = L.divIcon({
+            className: 'custom-car-icon',
+            html: `
+              <div class="relative flex items-center justify-center w-11 h-11">
+                <div class="absolute w-11 h-11 rounded-full bg-emerald-500/25 animate-ping"></div>
+                <div class="w-9 h-9 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center shadow-lg border-2 border-slate-900">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                </div>
+              </div>`,
+            iconSize: [44, 44],
+            iconAnchor: [22, 22]
+          });
+
+          this.carMarker = L.marker([lat, lng], { icon: carIcon, draggable: isDraggable }).addTo(this.map);
+          this.carMarker.on('dragend', (e) => {
+            const pos = e.target.getLatLng();
+            AppState.pinnedLat = pos.lat;
+            AppState.pinnedLng = pos.lng;
+          });
+        } else {
+          this.carMarker.setLatLng([lat, lng]);
+          if (isDraggable) {
+            this.carMarker.dragging.enable();
+          } else {
+            this.carMarker.dragging.disable();
+          }
+        }
+      },
+
+      updateGPSPill(accuracy) {
+        const pillText = document.getElementById('gps-text');
+        const indicator = document.getElementById('gps-indicator');
+
+        if (accuracy <= 10) {
+          indicator.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+          pillText.textContent = `GPS: ±${Math.round(accuracy)} m`;
+        } else if (accuracy <= 30) {
+          indicator.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse';
+          pillText.textContent = `GPS: ±${Math.round(accuracy)} m`;
+        } else {
+          indicator.className = 'w-2.5 h-2.5 rounded-full bg-red-400';
+          pillText.textContent = `GPS débil: ±${Math.round(accuracy)} m`;
+        }
+      },
+
+      setMode(mode) {
+        AppState.currentMode = mode;
+        const panel1 = document.getElementById('panel-state-1');
+        const panel2 = document.getElementById('panel-state-2');
+        const gpsPill = document.getElementById('gps-status-pill');
+        const telemetryPill = document.getElementById('telemetry-pill');
+        const viewToggle = document.getElementById('view-toggle');
+
+        if (mode === 1) {
+          // Buscando aparcamiento
+          panel1.classList.remove('hidden');
+          panel2.classList.add('hidden');
+          gpsPill.classList.remove('hidden');
+          telemetryPill.classList.add('hidden');
+          viewToggle.classList.add('hidden');
+          this.switchView('map');
+          WakeLockService.release();
+          if (this.carMarker) {
+            this.carMarker.dragging.enable();
+          }
+        } else {
+          // Coche aparcado (Modo Rescate)
+          panel1.classList.add('hidden');
+          panel2.classList.remove('hidden');
+          gpsPill.classList.add('hidden');
+          telemetryPill.classList.remove('hidden');
+          viewToggle.classList.remove('hidden');
+          WakeLockService.request();
+          if (this.carMarker) {
+            this.carMarker.dragging.disable();
+          }
+          this.refreshCarDetailsUI();
+          this.fitMapBounds();
+        }
+      },
+
+      switchView(view) {
+        AppState.activeView = view;
+        const mapContainer = document.getElementById('map');
+        const radarContainer = document.getElementById('radar-container');
+        const mapBtn = document.getElementById('toggle-map-btn');
+        const compassBtn = document.getElementById('toggle-compass-btn');
+        const recenterBtn = document.getElementById('recenter-btn');
+
+        if (view === 'map') {
+          mapContainer.classList.remove('hidden');
+          radarContainer.classList.add('hidden');
+          recenterBtn.classList.remove('hidden');
+          mapBtn.className = 'w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800 text-emerald-400 flex items-center justify-center transition-all active:scale-95 shadow-md';
+          compassBtn.className = 'w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center transition-all active:scale-95';
+          setTimeout(() => this.map.invalidateSize(), 150);
+        } else {
+          mapContainer.classList.add('hidden');
+          radarContainer.classList.remove('hidden');
+          recenterBtn.classList.add('hidden');
+          compassBtn.className = 'w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-slate-800 text-blue-400 flex items-center justify-center transition-all active:scale-95 shadow-md';
+          mapBtn.className = 'w-11 h-11 sm:w-12 sm:h-12 rounded-xl text-slate-400 hover:text-slate-200 flex items-center justify-center transition-all active:scale-95';
+        }
+      },
+
+      fitMapBounds() {
+        if (!this.map || !AppState.userLat || !AppState.activeSpot) return;
+        const bounds = L.latLngBounds([
+          [AppState.userLat, AppState.userLng],
+          [AppState.activeSpot.lat, AppState.activeSpot.lng]
+        ]);
+        this.map.fitBounds(bounds, { padding: [80, 80], maxZoom: 18 });
+      },
+
+      refreshTelemetry() {
+        if (!AppState.activeSpot || AppState.userLat === null) return;
+
+        // 1. Distancia exacta en metros
+        const dist = GeoService.calculateDistance(
+          AppState.userLat,
+          AppState.userLng,
+          AppState.activeSpot.lat,
+          AppState.activeSpot.lng
+        );
+        document.getElementById('telemetry-dist').textContent = `${dist} m`;
+        document.getElementById('compass-distance-big').textContent = dist;
+
+        // 2. Tiempo transcurrido
+        const elapsedMinutes = Math.floor((Date.now() - AppState.activeSpot.timestamp) / 60000);
+        let timeStr = `${elapsedMinutes}m`;
+        if (elapsedMinutes >= 60) {
+          const hours = Math.floor(elapsedMinutes / 60);
+          const mins = elapsedMinutes % 60;
+          timeStr = `${hours}h ${mins}m`;
+        }
+        document.getElementById('telemetry-time').textContent = timeStr;
+
+        // 3. ACTIVACIÓN AUTOMÁTICA DE BRÚJULA TÁCTICA A MENOS DE 30 METROS
+        if (dist <= 30) {
+          if (!AppState.nearCarTriggered) {
+            AppState.nearCarTriggered = true;
+            if (AppState.activeView !== 'compass') {
+              this.switchView('compass');
+              if ('vibrate' in navigator) navigator.vibrate([150, 75, 150]);
+              this.showToast('🎯 ¡A menos de 30 m! Brújula táctica activada');
+            }
+          }
+
+          // Notificación web si el usuario minimizó o está en Google Maps
+          if (document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted' && !AppState.notifiedNearCar) {
+            AppState.notifiedNearCar = true;
+            try {
+              new Notification('MiCoche - ¡Vehículo cerca!', {
+                body: `Estás a solo ${dist} metros de tu coche. Toca para ver la brújula táctica.`,
+                icon: './icons/icon-192.png'
+              });
+            } catch(e) {}
+          }
+        } else if (dist > 45) {
+          // Histéresis: si se aleja a más de 45m, se rearma el trigger automático
+          AppState.nearCarTriggered = false;
+          AppState.notifiedNearCar = false;
+        }
+      },
+
+      async refreshCarDetailsUI() {
+        const spot = AppState.activeSpot;
+        if (!spot) return;
+
+        // Dirección
+        document.getElementById('car-address-text').textContent = spot.address || 'Ubicación interior / Sin red';
+
+        // Resumen subterráneo
+        const floorText = spot.floor || '0';
+        const spotText = spot.spot || '-';
+        document.getElementById('car-subterranean-summary').textContent = `Planta: ${floorText} | Plaza: ${spotText}`;
+
+        // Inputs
+        document.getElementById('input-spot').value = spot.spot || '';
+        document.getElementById('input-note').value = spot.note || '';
+
+        // Botones de planta
+        document.querySelectorAll('.floor-btn').forEach((btn) => {
+          if (btn.dataset.floor === floorText) {
+            btn.className = 'floor-btn py-1.5 rounded-lg bg-emerald-600 text-xs font-bold text-slate-950';
+          } else {
+            btn.className = 'floor-btn py-1.5 rounded-lg bg-slate-800 text-xs font-bold text-slate-300 hover:bg-slate-700';
+          }
+        });
+
+        // Cargar foto si existe
+        if (spot.photoId) {
+          const photoData = await StorageManager.getPhoto(spot.photoId);
+          if (photoData) {
+            AppState.activePhotoUrl = photoData;
+            document.getElementById('photo-placeholder-icon').classList.add('hidden');
+            const thumb = document.getElementById('photo-thumb-img');
+            thumb.src = photoData;
+            thumb.classList.remove('hidden');
+          }
+        } else {
+          AppState.activePhotoUrl = null;
+          document.getElementById('photo-placeholder-icon').classList.remove('hidden');
+          document.getElementById('photo-thumb-img').classList.add('hidden');
+        }
+
+        // Marcador en mapa
+        this.updateCarPinMarker(spot.lat, spot.lng, false);
+      },
+
+      updateCompass(deviceHeading) {
+        if (!AppState.activeSpot || AppState.userLat === null) return;
+
+        // Calcular bearing geodésico hacia el coche
+        const targetBearing = GeoService.calculateBearing(
+          AppState.userLat,
+          AppState.userLng,
+          AppState.activeSpot.lat,
+          AppState.activeSpot.lng
+        );
+
+        // Diferencia angular relativa al teléfono
+        const diffAngle = (targetBearing - deviceHeading + 360) % 360;
+
+        // Rotar flecha
+        const arrow = document.getElementById('compass-arrow');
+        arrow.style.transform = `rotate(${diffAngle}deg)`;
+
+        // Rótulo direccional
+        const dirText = document.getElementById('compass-direction-text');
+        if (diffAngle >= 350 || diffAngle <= 10) {
+          dirText.textContent = 'DE FRENTE (Hacia tu coche)';
+          dirText.className = 'mt-2 text-sm font-black tracking-wide text-emerald-400 uppercase px-4 py-1 rounded-full bg-slate-900 border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)]';
+
+          // Vibración háptica en cono de ±10° (throttle de 1.5s)
+          const now = Date.now();
+          if (now - GeoService.lastHapticTime > 1500) {
+            if ('vibrate' in navigator) navigator.vibrate(40);
+            GeoService.lastHapticTime = now;
+          }
+        } else if (diffAngle > 10 && diffAngle <= 170) {
+          dirText.textContent = diffAngle < 45 ? 'Ligeramente a la derecha' : 'Gira a la derecha';
+          dirText.className = 'mt-2 text-sm font-semibold tracking-wide text-amber-400 uppercase px-4 py-1 rounded-full bg-slate-900 border border-white/10';
+        } else if (diffAngle >= 190 && diffAngle < 350) {
+          dirText.textContent = diffAngle > 315 ? 'Ligeramente a la izquierda' : 'Gira a la izquierda';
+          dirText.className = 'mt-2 text-sm font-semibold tracking-wide text-amber-400 uppercase px-4 py-1 rounded-full bg-slate-900 border border-white/10';
+        } else {
+          dirText.textContent = 'Detrás de ti';
+          dirText.className = 'mt-2 text-sm font-semibold tracking-wide text-slate-400 uppercase px-4 py-1 rounded-full bg-slate-900 border border-white/10';
+        }
+      },
+
+      updateMeterUI() {
+        const spot = AppState.activeSpot;
+        const progressBar = document.getElementById('meter-progress-bar');
+        const statusLabel = document.getElementById('meter-status-label');
+        const timeLeftSpan = document.getElementById('meter-time-left');
+        const dot = document.getElementById('meter-indicator-dot');
+
+        if (!spot || !spot.meterEndTimestamp) {
+          progressBar.style.width = '0%';
+          dot.className = 'w-2 h-2 rounded-full bg-slate-600';
+          timeLeftSpan.textContent = 'Sin parquímetro';
+          return;
+        }
+
+        const now = Date.now();
+        const totalDuration = spot.meterDurationMs || (spot.meterEndTimestamp - spot.timestamp);
+        const remainingMs = spot.meterEndTimestamp - now;
+
+        if (remainingMs <= 0) {
+          // Tiempo agotado: Rojo crítico
+          progressBar.style.width = '100%';
+          progressBar.className = 'h-full bg-red-500 rounded-full animate-pulse';
+          dot.className = 'w-2 h-2 rounded-full bg-red-500 animate-ping';
+          timeLeftSpan.textContent = '¡TIEMPO AGOTADO!';
+          timeLeftSpan.className = 'text-red-400 font-black animate-pulse';
+        } else {
+          const remainingMinutes = Math.ceil(remainingMs / 60000);
+          const percent = Math.min(100, Math.max(0, 100 - (remainingMs / totalDuration) * 100));
+          progressBar.style.width = `${percent}%`;
+
+          if (remainingMinutes <= 15) {
+            // Menos de 15 min: Ámbar pulsante
+            progressBar.className = 'h-full bg-amber-400 rounded-full';
+            dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+            timeLeftSpan.textContent = `Aviso: quedan ${remainingMinutes} min`;
+            timeLeftSpan.className = 'text-amber-400 font-bold';
+          } else {
+            // Tiempo holgado: Verde óptimo
+            progressBar.className = 'h-full bg-emerald-400 rounded-full';
+            dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+            timeLeftSpan.textContent = `Restan ${remainingMinutes} min`;
+            timeLeftSpan.className = 'text-slate-300 font-medium';
+          }
+        }
+      }
+    };
+
+    // --- === INICIALIZACIÓN Y CONTROLADORES DE EVENTOS === ---
+    document.addEventListener('DOMContentLoaded', async () => {
+      // 1. Inicializar Tema, Mapa e IndexedDB
+      UIManager.initTheme();
+      UIManager.initMap();
+      await StorageManager.initDB();
+      WakeLockService.initAutoReacquire();
+
+      // 2. Comprobar si hay un coche aparcado guardado
+      const savedSpot = StorageManager.getActiveSpot();
+      if (savedSpot) {
+        AppState.activeSpot = savedSpot;
+        UIManager.setMode(2);
+      } else {
+        UIManager.setMode(1);
+      }
+
+      // 3. Iniciar GPS en tiempo real
+      GeoService.startWatching(
+        (pos) => {
+          UIManager.updateUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+        },
+        (err) => {
+          console.warn('[GPS Error]', err.message);
+          const pillText = document.getElementById('gps-text');
+          const pillIndicator = document.getElementById('gps-indicator');
+          
+          if (err.code === 1) { // PERMISSION_DENIED
+            pillText.textContent = 'GPS denegado (Toca el mapa)';
+            pillIndicator.className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
+            document.getElementById('parking-hint-text').textContent = 'Permiso GPS denegado. Toca o arrastra en el mapa para situar tu coche.';
+          } else if (err.code === 2) { // POSITION_UNAVAILABLE
+            pillText.textContent = 'Sin cobertura GPS';
+            pillIndicator.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+            document.getElementById('parking-hint-text').textContent = 'Buscando satélites. Puedes afinar tu plaza tocando el mapa.';
+          } else {
+            pillText.textContent = 'GPS tiempo agotado';
+            pillIndicator.className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
+          }
+        }
+      );
+
+      // 4. Iniciar Brújula
+      CompassService.init((heading) => {
+        UIManager.updateCompass(heading);
+      });
+
+      // 5. Intervalos periódicos de refresco (telemetría y parquímetro)
+      setInterval(() => {
+        if (AppState.currentMode === 2) {
+          UIManager.refreshTelemetry();
+          UIManager.updateMeterUI();
+        }
+      }, 1000);
+
+      // --- ASIGNACIÓN DE LISTENERS DE BOTONES ---
+
+      // Botón "HE APARCADO AQUÍ"
+      document.getElementById('btn-park-here').addEventListener('click', async () => {
+        const lat = AppState.pinnedLat || AppState.userLat;
+        const lng = AppState.pinnedLng || AppState.userLng;
+
+        if (!lat || !lng) {
+          alert('Esperando señal de ubicación. Por favor, asegúrate de activar el GPS.');
+          return;
+        }
+
+        const newSpot = {
+          lat,
+          lng,
+          timestamp: Date.now(),
+          address: 'Obteniendo dirección...',
+          floor: '0',
+          spot: '',
+          note: '',
+          photoId: `photo_${Date.now()}`,
+          meterEndTimestamp: null,
+          meterDurationMs: null
+        };
+
+        AppState.activeSpot = newSpot;
+        StorageManager.setActiveSpot(newSpot);
+        UIManager.setMode(2);
+
+        // Geocodificación inversa en segundo plano
+        GeoService.reverseGeocode(lat, lng).then((resolvedAddress) => {
+          if (AppState.activeSpot && AppState.activeSpot.timestamp === newSpot.timestamp) {
+            AppState.activeSpot.address = resolvedAddress;
+            StorageManager.setActiveSpot(AppState.activeSpot);
+            document.getElementById('car-address-text').textContent = resolvedAddress;
+          }
+        });
+      });
+
+      // Conmutador Modo Diurno / Nocturno
+      document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+        const nextTheme = AppState.theme === 'light' ? 'dark' : 'light';
+        UIManager.setTheme(nextTheme);
+        UIManager.showToast(nextTheme === 'light' ? '☀️ Modo Diurno activado' : '🌙 Modo Nocturno activado');
+      });
+
+      // Navegación Externa: Ir Caminando
+      document.getElementById('btn-walk').addEventListener('click', () => {
+        if (!AppState.activeSpot) return;
+        AppState.walkingModeActive = true;
+
+        // Solicitar permiso de notificación para avisar cuando esté a menos de 30m si la app está minimizada
+        if ('Notification' in window && Notification.permission === 'default') {
+          try { Notification.requestPermission(); } catch (e) {}
+        }
+
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${AppState.activeSpot.lat},${AppState.activeSpot.lng}&travelmode=walking`;
+        window.open(url, '_blank');
+      });
+
+      // Retorno desde Google Maps u otra app: comprobación instantánea de cercanía (<30m)
+      const checkNearCarOnResume = () => {
+        if (AppState.currentMode === 2 && AppState.activeSpot && AppState.userLat !== null) {
+          const dist = GeoService.calculateDistance(
+            AppState.userLat,
+            AppState.userLng,
+            AppState.activeSpot.lat,
+            AppState.activeSpot.lng
+          );
+          if (dist <= 30) {
+            UIManager.switchView('compass');
+            UIManager.showToast(`🎯 ¡Estás a solo ${dist} m! Brújula táctica activada`);
+            if ('vibrate' in navigator) navigator.vibrate([150, 75, 150]);
+          }
+        }
+      };
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          checkNearCarOnResume();
+        }
+      });
+      window.addEventListener('focus', checkNearCarOnResume);
+
+      // Navegación Externa: En Coche
+      document.getElementById('btn-drive').addEventListener('click', () => {
+        if (!AppState.activeSpot) return;
+        const url = `https://www.google.com/maps/dir/?api=1&destination=${AppState.activeSpot.lat},${AppState.activeSpot.lng}&travelmode=driving`;
+        window.open(url, '_blank');
+      });
+
+      // Compartir Ubicación (Web Share API)
+      document.getElementById('btn-share').addEventListener('click', async () => {
+        if (!AppState.activeSpot) return;
+        const s = AppState.activeSpot;
+        const text = `🚗 He aparcado el coche aquí (Planta: ${s.floor || 0}, Plaza: ${s.spot || 'N/A'})\nRuta en Google Maps: https://maps.google.com/?q=${s.lat},${s.lng}`;
+
+        if (navigator.share) {
+          try {
+            await navigator.share({
+              title: 'Ubicación de mi coche',
+              text: text
+            });
+          } catch (e) {}
+        } else {
+          // Fallback a portapapeles
+          try {
+            await navigator.clipboard.writeText(text);
+            alert('¡Enlace copiado al portapapeles!');
+          } catch (e) {
+            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+          }
+        }
+      });
+
+      // Botón Liberar Plaza con Doble Confirmación (4s)
+      const releaseBtn = document.getElementById('btn-release');
+      const releaseLabel = document.getElementById('release-btn-label');
+      releaseBtn.addEventListener('click', () => {
+        if (!AppState.releaseTimer) {
+          // Primer toque: Solicitar confirmación
+          releaseLabel.textContent = '¿Confirmar y borrar?';
+          releaseBtn.classList.add('bg-red-600', 'text-white');
+          AppState.releaseTimer = setTimeout(() => {
+            releaseLabel.textContent = 'Ya estoy en mi coche';
+            releaseBtn.classList.remove('bg-red-600', 'text-white');
+            AppState.releaseTimer = null;
+          }, 4000);
+        } else {
+          // Segundo toque: Confirmación efectiva
+          clearTimeout(AppState.releaseTimer);
+          AppState.releaseTimer = null;
+          releaseLabel.textContent = 'Ya estoy en mi coche';
+          releaseBtn.classList.remove('bg-red-600', 'text-white');
+
+          // Archivar en historial de las 3 últimas
+          if (AppState.activeSpot) {
+            StorageManager.archiveSpot(AppState.activeSpot);
+            if (AppState.activeSpot.photoId) {
+              StorageManager.deletePhoto(AppState.activeSpot.photoId);
+            }
+          }
+
+          StorageManager.clearActiveSpot();
+          AppState.activeSpot = null;
+          AppState.activePhotoUrl = null;
+          UIManager.setMode(1);
+        }
+      });
+
+      // Conmutadores de vista (Mapa / Radar)
+      document.getElementById('toggle-map-btn').addEventListener('click', () => UIManager.switchView('map'));
+      document.getElementById('toggle-compass-btn').addEventListener('click', () => UIManager.switchView('compass'));
+
+      // Re-centrar mapa
+      document.getElementById('recenter-btn').addEventListener('click', () => {
+        if (AppState.currentMode === 2 && AppState.activeSpot) {
+          UIManager.fitMapBounds();
+        } else if (AppState.userLat) {
+          UIManager.map.setView([AppState.userLat, AppState.userLng], 17);
+        }
+      });
+
+      // Acordeón detalles subterráneos
+      const subDrawer = document.getElementById('subterranean-drawer');
+      document.getElementById('btn-toggle-subterranean').addEventListener('click', () => {
+        subDrawer.classList.toggle('hidden');
+      });
+
+      // Selector de Planta
+      document.querySelectorAll('.floor-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const floor = e.target.dataset.floor;
+          if (AppState.activeSpot) {
+            AppState.activeSpot.floor = floor;
+            StorageManager.setActiveSpot(AppState.activeSpot);
+            UIManager.refreshCarDetailsUI();
+          }
+        });
+      });
+
+      // Inputs de Plaza y Nota (guardado con debounce)
+      const saveInputs = () => {
+        if (AppState.activeSpot) {
+          AppState.activeSpot.spot = document.getElementById('input-spot').value.trim();
+          AppState.activeSpot.note = document.getElementById('input-note').value.trim();
+          StorageManager.setActiveSpot(AppState.activeSpot);
+          UIManager.refreshCarDetailsUI();
+        }
+      };
+      document.getElementById('input-spot').addEventListener('change', saveInputs);
+      document.getElementById('input-note').addEventListener('change', saveInputs);
+
+      // Captura y compresión de fotografía del ticket o pilar
+      document.getElementById('camera-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file || !AppState.activeSpot) return;
+
+        try {
+          const compressedDataUrl = await ImageService.compressImage(file, 800, 0.7);
+          const photoId = AppState.activeSpot.photoId || `photo_${Date.now()}`;
+          AppState.activeSpot.photoId = photoId;
+          await StorageManager.savePhoto(photoId, compressedDataUrl);
+          StorageManager.setActiveSpot(AppState.activeSpot);
+          AppState.activePhotoUrl = compressedDataUrl;
+
+          // Actualizar miniatura
+          document.getElementById('photo-placeholder-icon').classList.add('hidden');
+          const thumb = document.getElementById('photo-thumb-img');
+          thumb.src = compressedDataUrl;
+          thumb.classList.remove('hidden');
+        } catch (err) {
+          alert('No se pudo procesar la imagen.');
+        }
+      });
+
+      // Visor de foto en Pantalla Completa / Modo Linterna
+      document.getElementById('photo-preview-box').addEventListener('click', () => {
+        if (AppState.activePhotoUrl) {
+          const fullImg = document.getElementById('flashlight-full-img');
+          fullImg.src = AppState.activePhotoUrl;
+          document.getElementById('modal-flashlight').classList.remove('hidden');
+        }
+      });
+      document.getElementById('close-flashlight-btn').addEventListener('click', () => {
+        document.getElementById('modal-flashlight').classList.add('hidden');
+      });
+
+      // Modales: Parquímetro
+      const meterModal = document.getElementById('modal-meter');
+      document.getElementById('btn-open-meter').addEventListener('click', () => meterModal.classList.remove('hidden'));
+      document.getElementById('close-meter-modal').addEventListener('click', () => meterModal.classList.add('hidden'));
+
+      // Píldoras rápidas de parquímetro (+30m, +1h, +2h)
+      document.querySelectorAll('.meter-pill-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const addMin = parseInt(e.target.dataset.addMin, 10);
+          if (AppState.activeSpot) {
+            const durationMs = addMin * 60 * 1000;
+            AppState.activeSpot.meterDurationMs = durationMs;
+            AppState.activeSpot.meterEndTimestamp = Date.now() + durationMs;
+            StorageManager.setActiveSpot(AppState.activeSpot);
+            UIManager.updateMeterUI();
+            meterModal.classList.add('hidden');
+          }
+        });
+      });
+
+      // Parquímetro a hora exacta personalizada
+      document.getElementById('btn-set-custom-meter').addEventListener('click', () => {
+        const timeVal = document.getElementById('custom-meter-time').value;
+        if (!timeVal || !AppState.activeSpot) return;
+
+        const [hours, mins] = timeVal.split(':').map(Number);
+        const targetDate = new Date();
+        targetDate.setHours(hours, mins, 0, 0);
+
+        if (targetDate.getTime() <= Date.now()) {
+          targetDate.setDate(targetDate.getDate() + 1); // Si ya pasó hoy, se asume mañana
+        }
+
+        const durationMs = targetDate.getTime() - Date.now();
+        AppState.activeSpot.meterDurationMs = durationMs;
+        AppState.activeSpot.meterEndTimestamp = targetDate.getTime();
+        StorageManager.setActiveSpot(AppState.activeSpot);
+        UIManager.updateMeterUI();
+        meterModal.classList.add('hidden');
+      });
+
+      // Quitar parquímetro
+      document.getElementById('btn-clear-meter').addEventListener('click', () => {
+        if (AppState.activeSpot) {
+          AppState.activeSpot.meterEndTimestamp = null;
+          AppState.activeSpot.meterDurationMs = null;
+          StorageManager.setActiveSpot(AppState.activeSpot);
+          UIManager.updateMeterUI();
+          meterModal.classList.add('hidden');
+        }
+      });
+
+      // Modal Historial
+      const historyModal = document.getElementById('modal-history');
+      document.getElementById('btn-history').addEventListener('click', () => {
+        const history = StorageManager.getHistory();
+        const container = document.getElementById('history-items-container');
+        container.innerHTML = '';
+
+        if (history.length === 0) {
+          container.innerHTML = '<p class="text-xs text-slate-500 py-4 text-center">No hay plazas previas en el historial.</p>';
+        } else {
+          history.forEach((item, index) => {
+            const dateStr = new Date(item.timestamp).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'p-3 rounded-2xl bg-slate-950 border border-white/5 flex items-center justify-between';
+            itemDiv.innerHTML = `
+              <div class="flex flex-col min-w-0 pr-2">
+                <span class="text-xs font-bold text-slate-200 truncate">${item.address || 'Ubicación archivada'}</span>
+                <span class="text-[10px] text-slate-400">Planta ${item.floor || '0'} | ${dateStr}</span>
+              </div>
+              <button class="restore-history-btn px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[11px] font-bold text-slate-950 shrink-0" data-index="${index}">
+                Recuperar
+              </button>
+            `;
+            container.appendChild(itemDiv);
+          });
+
+          // Listener de recuperación
+          container.querySelectorAll('.restore-history-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+              const idx = parseInt(e.target.dataset.index, 10);
+              const selectedSpot = history[idx];
+              if (selectedSpot) {
+                AppState.activeSpot = selectedSpot;
+                StorageManager.setActiveSpot(selectedSpot);
+                UIManager.setMode(2);
+                historyModal.classList.add('hidden');
+              }
+            });
+          });
+        }
+
+        historyModal.classList.remove('hidden');
+      });
+      document.getElementById('close-history-modal').addEventListener('click', () => historyModal.classList.add('hidden'));
+
+      // Modal Información y Desarrollador
+      const infoModal = document.getElementById('modal-info');
+      document.getElementById('info-btn').addEventListener('click', () => infoModal.classList.remove('hidden'));
+      document.getElementById('close-info-modal').addEventListener('click', () => infoModal.classList.add('hidden'));
+
+      // 6. Registro de Service Worker para PWA Offline
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js')
+          .then(() => console.log('[SW] Registrado con éxito'))
+          .catch((err) => console.warn('[SW Error]', err));
+      }
+    });
+  </script>
+</body>
+</html>
